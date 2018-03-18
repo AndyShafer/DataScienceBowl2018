@@ -23,27 +23,49 @@ import matplotlib.pyplot as plt
 from skimage.io import imread, imshow, imread_collection, concatenate_images,show
 from skimage.transform import resize
 from itertools import chain
+from scipy import ndimage
 
-def encode_pixels(prediction):
+def rle_encoding(x):
+    x = x.T.flatten()
     encoded_pixels = []
     pixel = 0
-    while(pixel < len(prediction)):
-        if(prediction[pixel] == 1):
+    while(pixel < len(x)):
+        if(x[pixel] == 1):
             encoded_pixels.append(pixel+1)
             pixel_length = 1
             pixel += 1
-            while(pixel < len(prediction) and prediction[pixel] == 1):
+            while(pixel < len(x) and x[pixel] == 1):
                 pixel_length += 1
                 pixel += 1
             encoded_pixels.append(pixel_length)
         pixel += 1
     return encoded_pixels
-
-def display_prediction(prediction, height, width):
-    prediction = np.resize(prediction, (height, width))
+    
+def display_prediction(prediction): 
     prediction = prediction.astype(np.float32)
     imshow(prediction)
     show()
+    
+def label_nuclei(prediction):
+    labels, nlabels = ndimage.label(prediction)
+    
+    print('There are {} separate components / objects detected.'.format(nlabels))
+    
+    for label_ind, label_coords in enumerate(ndimage.find_objects(labels)):
+        cell = prediction[label_coords]
+        # Check if the label is too small
+        if(np.product(cell.shape) < 10):
+            prediction = np.where(labels==label_ind+1, 0, prediction)
+    
+    # Regenerate labels
+    labels, nlabels = ndimage.label(prediction)
+    print("There are now {} separate components / objects detected.".format(nlabels))
+    label_arrays = []
+    for label_num in range(1, nlabels+1):
+        label_mask = np.where(labels == label_num, 1, 0)
+        label_arrays.append(label_mask)
+    
+    return prediction, label_arrays
 
 def generate_output_file():
     IMG_CHANNELS = 3 #RGB
@@ -67,16 +89,20 @@ def generate_output_file():
             img = np.resize(img, (height * width, 3))
             kmeans = KMeans(n_clusters=2).fit(img)
             prediction = kmeans.labels_
-            display_prediction(prediction, height, width)
+            prediction = np.resize(prediction, (height, width))
+            display_prediction(prediction)
             print('Enter "y" if the prediction needs to be inverted: ')
             if(input() == 'y'):
                 prediction[prediction == 0] = 2
                 prediction[prediction == 1] = 0
                 prediction[prediction == 2] = 1
-                display_prediction(prediction, height, width)
-
-            encoded_pixels = encode_pixels(prediction)
-            writer.writerow([test_id, ' '.join(map(str, encoded_pixels))])            
+                display_prediction(prediction)
+            
+            prediction, label_arrays = label_nuclei(prediction)
+            display_prediction(prediction)
+            for label_mask in label_arrays:
+                encoded_pixels = rle_encoding(label_mask)
+                writer.writerow([test_id, ' '.join(map(str, encoded_pixels))])
             
 
 generate_output_file()
