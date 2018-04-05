@@ -82,17 +82,17 @@ plt.show()
 imshow(np.squeeze(Y_train[ix]))
 plt.show()
 
+# Define IoU metric
 def mean_iou(y_true, y_pred):
     prec = []
     for t in np.arange(0.5, 1.0, 0.05):
         y_pred_ = tf.to_int32(y_pred > t)
-        score, up_opt = tf.metrics.mean_iou(y_true, y_pred_, 2)
+        score, up_opt = tf.metrics.mean_iou(y_true, y_pred_, 2, y_true)
         K.get_session().run(tf.local_variables_initializer())
         with tf.control_dependencies([up_opt]):
             score = tf.identity(score)
         prec.append(score)
     return K.mean(K.stack(prec), axis=0)
-
 
 # Build U-Net model
 inputs = Input((IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS))
@@ -154,7 +154,7 @@ def create_model():
     model.summary()
     return model
 
-def get_model(path='model-sdbowl2018-1.h5'):
+def get_model(path='model-dsbowl2018-1.h5'):
     return load_model('model-dsbowl2018-1.h5', custom_objects={'mean_iou': mean_iou})
 
 def train(model, nb_epochs=50):
@@ -211,17 +211,18 @@ def predict():
                                            (sizes_test[i][0], sizes_test[i][1]),
                                            mode='constant', preserve_range=True))
     
-'''    
+    '''    
     for idx in range(len(X_test)):
         imshow(X_test[idx])
         plt.show()
         imshow(np.squeeze(preds_test_t[idx]))
         plt.show()
-'''   
-     
+    '''   
+   
     return preds_train_t, preds_val_t, preds_test_upsampled
 
-model = get_model()
+#model = get_model()
+model = create_model()
 train(model, 1000)
-#results = predict()[2]
-#create_submission_file(results)
+results = predict()[2]
+create_submission_file(results)
